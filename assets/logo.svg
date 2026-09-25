@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#15803D"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/><g transform="translate(51.19999999999999 51.19999999999999) scale(0.9)">
+    <defs>
+      <mask id="ball">
+        <circle cx="512" cy="512" r="196" fill="white"/>
+        <g fill="black"><polygon points="512.0,448.0 572.9,492.2 549.6,563.8 474.4,563.8 451.1,492.2"/><line x1="512.0" y1="456.0" x2="512.0" y2="372.0" stroke="black" stroke-width="16"/><polygon points="512.0,372.0 458.7,333.3 479.1,270.7 544.9,270.7 565.3,333.3"/><line x1="565.3" y1="494.7" x2="645.1" y2="468.7" stroke="black" stroke-width="16"/><polygon points="645.1,468.7 665.5,406.1 731.3,406.1 751.7,468.7 698.4,507.4"/><line x1="544.9" y1="557.3" x2="594.3" y2="625.3" stroke="black" stroke-width="16"/><polygon points="594.3,625.3 660.1,625.3 680.5,687.9 627.2,726.6 573.9,687.9"/><line x1="479.1" y1="557.3" x2="429.7" y2="625.3" stroke="black" stroke-width="16"/><polygon points="429.7,625.3 450.1,687.9 396.8,726.6 343.5,687.9 363.9,625.3"/><line x1="458.7" y1="494.7" x2="378.9" y2="468.7" stroke="black" stroke-width="16"/><polygon points="378.9,468.7 325.6,507.4 272.3,468.7 292.7,406.1 358.5,406.1"/></g>
+      </mask>
+    </defs>
+    <circle cx="512" cy="512" r="196" fill="#FFFFFF" mask="url(#ball)"/>
+    <circle cx="512" cy="512" r="187" fill="none" stroke="#FFFFFF" stroke-width="18"/>
+    
+    <path d="M205.7 369.2 A338 338 0 0 1 763.2 285.8" fill="none" stroke="#FFFFFF"
+      stroke-width="50" stroke-linecap="round"/>
+    <polygon points="843.5,375.0 805.9,247.4 720.5,324.3"
+      fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
+    
+    <path d="M818.3 654.8 A338 338 0 0 1 260.8 738.2" fill="none" stroke="#FFFFFF"
+      stroke-width="50" stroke-linecap="round"/>
+    <polygon points="180.5,649.0 218.1,776.6 303.5,699.7"
+      fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/></g></svg>
