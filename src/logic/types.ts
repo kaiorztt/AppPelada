@@ -19,10 +19,10 @@ export type Match = {
 };
 
 /**
- * Time fechado: cada time tem linha + 1 jogadores, que se revezam no gol
- * (ou usam o goleiro sorteado para o time).
- * Time aberto: os times têm só a linha; goleiros fixos ficam no gol e, se faltar
- * goleiro, quem está de próximo pega o gol.
+ * 'closed' (Rodízio no gol): cada time tem linha + 1 jogadores, que se revezam
+ * no gol (ou usam o goleiro sorteado para o time).
+ * 'open' (Goleiro fixo): os times têm só a linha; goleiros fixos ficam no gol e,
+ * se faltar goleiro, quem está de próximo pega o gol.
  */
 export type TeamMode = 'closed' | 'open';
 
@@ -34,7 +34,7 @@ export type Rotation = {
   mode: TeamMode;
   /** Jogadores por time completo. */
   perTeam: number;
-  /** Goleiros fixos (só no modo aberto), fora dos times. */
+  /** Goleiros fixos (só no modo goleiro fixo), fora dos times. */
   keepers: string[];
   /** Os dois times em campo. */
   onField: string[];

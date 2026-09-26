@@ -7,7 +7,7 @@ import { usePeladaStore } from '@/store/usePeladaStore';
 import { font, radius, space, useColors } from '@/theme';
 import { IconButton, Segmented, tap } from './ui';
 
-/** Configurações da pelada: tamanho do time, time fechado/aberto e como completar o próximo. */
+/** Configurações da pelada: jogadores de linha, goleiro (rodízio ou fixo) e como completar o próximo. */
 export function GameSettings() {
   const c = useColors();
   const [open, setOpen] = useState(false);
@@ -19,7 +19,7 @@ export function GameSettings() {
   const closed = teamMode === 'closed';
   const summary = [
     `${lineSize} na linha`,
-    closed ? 'Time fechado' : 'Time aberto',
+    closed ? 'Rodízio no gol' : 'Goleiro fixo',
     fillMode === 'arrival' ? 'Por chegada' : 'Por sorteio',
   ].join(' · ');
 
@@ -51,19 +51,19 @@ export function GameSettings() {
           </View>
 
           <View style={styles.block}>
-            <Text style={[font.caption, { color: c.textMuted }]}>TIME</Text>
+            <Text style={[font.caption, { color: c.textMuted }]}>GOLEIRO</Text>
             <Segmented<TeamMode>
               value={teamMode}
               onChange={setTeamMode}
               options={[
-                { value: 'closed', label: 'Fechado' },
-                { value: 'open', label: 'Aberto' },
+                { value: 'closed', label: 'Rodízio' },
+                { value: 'open', label: 'Goleiro fixo' },
               ]}
             />
             <Text style={[font.small, { color: c.textMuted }]}>
               {closed
                 ? `Cada time tem ${lineSize + 1} (${lineSize} na linha + 1) e eles se revezam no gol. Goleiros marcados são sorteados um por time.`
-                : `Cada time tem só ${lineSize} na linha. Goleiros marcados ficam fixos no gol; se faltar goleiro, quem está de próximo pega o gol.`}
+                : `Cada time tem só ${lineSize} na linha. Goleiros marcados ficam fixos no gol; onde faltar goleiro aparece só “Goleiro” e quem está de próximo pega o gol.`}
             </Text>
           </View>
 
@@ -85,7 +85,7 @@ export function GameSettings() {
           </View>
 
           <Text style={[font.small, { color: c.textMuted, fontStyle: 'italic' }]}>
-            Tamanho e tipo de time valem a partir do próximo sorteio.
+            Jogadores de linha e tipo de goleiro valem a partir do próximo sorteio.
           </Text>
         </View>
       ) : null}

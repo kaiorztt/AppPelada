@@ -3,7 +3,13 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { drawTeams } from '@/logic/draw';
-import { addLatePlayer, removeFromRotation, rotate } from '@/logic/rotation';
+import {
+  addLatePlayer,
+  playersInRotation,
+  removeFromRotation,
+  ReorderContext,
+  rotate,
+} from '@/logic/rotation';
 import { FillMode, Match, Player, Rotation, TeamMode } from '@/logic/types';
 
 type State = {
@@ -23,7 +29,7 @@ type State = {
 };
 
 type Actions = {
-  addPlayer: (name: string) => void;
+  addPlayer: (name: string) => string | undefined;
   removePlayer: (id: string) => void;
   toggleGoalkeeper: (id: string) => void;
   togglePresent: (id: string) => void;
@@ -34,11 +40,17 @@ type Actions = {
   setTotalCost: (value: number) => void;
   draw: () => void;
   teamLost: (teamIds: string[]) => void;
+  /** Jogador foi embora no meio da pelada: sai do rodízio, mas continua presente (paga). */
+  playerLeft: (id: string) => void;
+  /** Jogador chegou depois do sorteio: marca presença e entra no rodízio. */
+  lateArrival: (id: string) => void;
   undoMatch: () => void;
   newSession: () => void;
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+const reorderCtx = (s: State): ReorderContext => ({ arrival: s.presentIds, fill: s.fillMode });
 
 export const usePeladaStore = create<State & Actions>()(
   persist(
@@ -56,8 +68,10 @@ export const usePeladaStore = create<State & Actions>()(
 
       addPlayer: (name) => {
         const trimmed = name.trim();
-        if (!trimmed) return;
-        set((s) => ({ players: [...s.players, { id: uid(), name: trimmed, isGoalkeeper: false }] }));
+        if (!trimmed) return undefined;
+        const id = uid();
+        set((s) => ({ players: [...s.players, { id, name: trimmed, isGoalkeeper: false }] }));
+        return id;
       },
 
       removePlayer: (id) =>
@@ -65,7 +79,8 @@ export const usePeladaStore = create<State & Actions>()(
           players: s.players.filter((p) => p.id !== id),
           presentIds: s.presentIds.filter((p) => p !== id),
           paidIds: s.paidIds.filter((p) => p !== id),
-          rotation: s.rotation && removeFromRotation(s.rotation, id),
+          rotation: s.rotation && removeFromRotation(s.rotation, id, reorderCtx(s)),
+          undoStack: [],
         })),
 
       toggleGoalkeeper: (id) =>
@@ -78,7 +93,8 @@ export const usePeladaStore = create<State & Actions>()(
           if (s.presentIds.includes(id)) {
             return {
               presentIds: s.presentIds.filter((p) => p !== id),
-              rotation: s.rotation && removeFromRotation(s.rotation, id),
+              rotation: s.rotation && removeFromRotation(s.rotation, id, reorderCtx(s)),
+              undoStack: [],
             };
           }
           return {
@@ -87,6 +103,7 @@ export const usePeladaStore = create<State & Actions>()(
             rotation:
               s.rotation &&
               addLatePlayer(s.rotation, id, !!s.players.find((p) => p.id === id)?.isGoalkeeper),
+            undoStack: [],
           };
         }),
 
@@ -133,6 +150,24 @@ export const usePeladaStore = create<State & Actions>()(
         });
       },
 
+      playerLeft: (id) =>
+        set((s) =>
+          s.rotation
+            ? { rotation: removeFromRotation(s.rotation, id, reorderCtx(s)), undoStack: [] }
+            : {},
+        ),
+
+      lateArrival: (id) =>
+        set((s) => {
+          if (!s.rotation || playersInRotation(s.rotation).has(id)) return {};
+          const isGoalkeeper = !!s.players.find((p) => p.id === id)?.isGoalkeeper;
+          return {
+            presentIds: s.presentIds.includes(id) ? s.presentIds : [...s.presentIds, id],
+            rotation: addLatePlayer(s.rotation, id, isGoalkeeper),
+            undoStack: [],
+          };
+        }),
+
       undoMatch: () => {
         const { undoStack, matches } = get();
         if (!undoStack.length) return;
@@ -151,7 +186,7 @@ export const usePeladaStore = create<State & Actions>()(
       name: 'pelada-store',
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
-      // v0 não guardava modo/tamanho no rodízio: era sempre time fechado.
+      // v0 não guardava modo/tamanho no rodízio: era sempre rodízio no gol.
       migrate: (persisted, version) => {
         const s = persisted as State;
         if (version < 1) {

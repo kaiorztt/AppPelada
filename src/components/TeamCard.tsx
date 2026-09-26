@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Player, Rotation, Team, TeamMode } from '@/logic/types';
-import { goalkeepersLabel } from '@/store/selectors';
+import { Player, Team, TeamMode } from '@/logic/types';
+import { FixedKeeper } from '@/store/selectors';
 import { font, radius, space, useColors } from '@/theme';
 import { Card, Chip } from './ui';
 
@@ -12,15 +12,17 @@ type Props = {
   players: Record<string, Player>;
   perTeam: number;
   mode: TeamMode;
+  /** Goleiro fixo do gol deste time (só times em campo, modo goleiro fixo). */
+  fixedKeeper?: FixedKeeper;
   badge?: string;
   footer?: ReactNode;
   compact?: boolean;
 };
 
-export function TeamCard({ team, players, perTeam, mode, badge, footer, compact }: Props) {
+export function TeamCard({ team, players, perTeam, mode, fixedKeeper, badge, footer, compact }: Props) {
   const c = useColors();
   const members = team.playerIds.map((id) => players[id]).filter(Boolean);
-  // No time aberto os goleiros ficam fora dos times; quem está no time é linha.
+  // No goleiro fixo os goleiros ficam fora dos times; quem está no time é linha.
   const keeper = mode === 'closed' ? members.find((p) => p.isGoalkeeper) : undefined;
   const rotatesInGoal = mode === 'closed' && !keeper;
   const ordered = keeper ? [keeper, ...members.filter((p) => p !== keeper)] : members;
@@ -46,10 +48,28 @@ export function TeamCard({ team, players, perTeam, mode, badge, footer, compact 
         ) : null}
         {compact ? (
           <Text style={[font.small, { color: c.textMuted }]} numberOfLines={2}>
-            {ordered.map((p) => (p === keeper ? `${p.name} (gol)` : p.name)).join(' · ')}
+            {[
+              ...(fixedKeeper ? [`${fixedKeeper.name} (gol)`] : []),
+              ...ordered.map((p) => (p === keeper ? `${p.name} (gol)` : p.name)),
+            ].join(' · ')}
           </Text>
         ) : (
           <View style={{ gap: space.sm }}>
+            {fixedKeeper ? (
+              <View style={styles.row}>
+                <Ionicons name="hand-left" size={16} color={team.color} />
+                <Text
+                  style={[
+                    font.body,
+                    fixedKeeper.placeholder
+                      ? { color: c.textMuted, fontStyle: 'italic' }
+                      : { color: c.text },
+                  ]}
+                >
+                  {fixedKeeper.name}
+                </Text>
+              </View>
+            ) : null}
             {ordered.map((p) => (
               <View key={p.id} style={styles.row}>
                 <Ionicons
@@ -63,21 +83,6 @@ export function TeamCard({ team, players, perTeam, mode, badge, footer, compact 
           </View>
         )}
         {footer}
-      </View>
-    </Card>
-  );
-}
-
-/** No time aberto: quem está nos dois gols. */
-export function GoalsCard({ rotation, players }: { rotation: Rotation; players: Record<string, Player> }) {
-  const c = useColors();
-  if (rotation.mode !== 'open') return null;
-  return (
-    <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md }}>
-      <Ionicons name="hand-left" size={20} color={c.accent} />
-      <View style={{ flex: 1 }}>
-        <Text style={[font.caption, { color: c.textMuted }]}>NO GOL</Text>
-        <Text style={[font.body, { color: c.text }]}>{goalkeepersLabel(rotation, players).join(' · ')}</Text>
       </View>
     </Card>
   );

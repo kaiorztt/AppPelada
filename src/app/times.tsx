@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 
-import { GoalsCard, TeamCard } from '@/components/TeamCard';
+import { TeamCard } from '@/components/TeamCard';
 import { Button, confirm, EmptyState, IconButton, Screen } from '@/components/ui';
-import { teamsAsText, usePlayersById } from '@/store/selectors';
+import { fixedKeeperFor, teamsAsText, usePlayersById } from '@/store/selectors';
 import { usePeladaStore } from '@/store/usePeladaStore';
 import { space, useColors } from '@/theme';
 
@@ -37,8 +37,8 @@ export default function TeamsScreen() {
       title="Times"
       subtitle={
         rotation.mode === 'closed'
-          ? `${order.length} times de ${rotation.perTeam} · fechado`
-          : `${order.length} times de ${rotation.perTeam} na linha · aberto`
+          ? `${order.length} times de ${rotation.perTeam} · rodízio no gol`
+          : `${order.length} times de ${rotation.perTeam} na linha · goleiro fixo`
       }
       right={
         <IconButton
@@ -51,7 +51,6 @@ export default function TeamsScreen() {
       }
     >
       <ScrollView contentContainerStyle={styles.list}>
-        <GoalsCard rotation={rotation} players={players} />
         {order.map((id, i) => (
           <TeamCard
             key={id}
@@ -59,6 +58,7 @@ export default function TeamsScreen() {
             players={players}
             perTeam={rotation.perTeam}
             mode={rotation.mode}
+            fixedKeeper={fixedKeeperFor(rotation, players, id)}
             badge={i < 2 ? 'EM CAMPO' : i === 2 ? 'PRÓXIMO' : `${i - 1}º NA FILA`}
           />
         ))}

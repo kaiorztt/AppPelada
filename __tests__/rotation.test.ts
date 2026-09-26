@@ -100,6 +100,38 @@ describe('removeFromRotation', () => {
     expect(r.queue).toEqual([]);
     expect(r.teams.t3).toBeUndefined();
   });
+
+  it('quem sai do time em campo é reposto pelo último time da fila, por chegada', () => {
+    const D = ['d1', 'd2', 'd3'];
+    const s = state(A, B, C, D);
+    const r = removeFromRotation(s, 'a2', { arrival: [...A, ...B, ...C, 'd3', 'd1', 'd2'] });
+    expect(r.teams.t1.playerIds).toEqual(['ag', 'a1', 'a3', 'a4', 'a5', 'd3']);
+    expect(r.teams.t3.playerIds).toEqual(C);
+    expect(r.teams.t4.playerIds).toEqual(['d1', 'd2']);
+  });
+
+  it('o último time da fila fica incompleto e some se esvaziar', () => {
+    const s = state(A, B, C, ['d1']);
+    const r = removeFromRotation(s, 'b3', { arrival: [] });
+    expect(r.teams.t2.playerIds).toEqual(['bg', 'b1', 'b2', 'b4', 'b5', 'd1']);
+    expect(r.queue).toEqual(['t3']);
+    expect(r.teams.t4).toBeUndefined();
+  });
+
+  it('sem fila, o time em campo só fica com um a menos', () => {
+    const s = state(A, B);
+    const r = removeFromRotation(s, 'a1');
+    expect(r.teams.t1.playerIds).toEqual(['ag', 'a2', 'a3', 'a4', 'a5']);
+    expect(r.teams.t2.playerIds).toEqual(B);
+  });
+
+  it('com fill=draw sorteia quem sobe do último time', () => {
+    const s = state(A, B, ['c1', 'c2', 'c3']);
+    // random sempre 0: o embaralhamento de [c1,c2,c3] vira [c2,c3,c1]
+    const r = removeFromRotation(s, 'a1', { arrival: [], fill: 'draw', random: () => 0 });
+    expect(r.teams.t1.playerIds).toContain('c2');
+    expect(r.teams.t3.playerIds).toEqual(['c1', 'c3']);
+  });
 });
 
 describe('rotate — sorteio para completar', () => {

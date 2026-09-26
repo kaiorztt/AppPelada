@@ -8,30 +8,38 @@ export function usePlayersById(): Record<string, Player> {
   return useMemo(() => Object.fromEntries(players.map((p) => [p.id, p])), [players]);
 }
 
+export type FixedKeeper = { name: string; placeholder: boolean };
+
 /**
- * Quem fica nos dois gols no time aberto: os goleiros fixos e, se faltar,
- * um jogador do time que está de próximo.
+ * Goleiro fixo: cada gol tem seu goleiro, que fica no lugar do time em campo
+ * (onField[i] usa keepers[i]). Sem goleiro para aquele gol, mostra só "Goleiro".
+ * Retorna undefined para times fora de campo ou no modo rodízio.
  */
-export function goalkeepersLabel(rotation: Rotation, players: Record<string, Player>): string[] {
-  const fixed = rotation.keepers.map((id) => players[id]?.name).filter(Boolean);
-  const next = rotation.queue[0] ? rotation.teams[rotation.queue[0]].name : null;
-  const missing = Array.from({ length: Math.max(0, 2 - fixed.length) }, () =>
-    next ? `alguém do ${next}` : 'revezam',
-  );
-  return [...fixed, ...missing];
+export function fixedKeeperFor(
+  rotation: Rotation,
+  players: Record<string, Player>,
+  teamId: string,
+): FixedKeeper | undefined {
+  if (rotation.mode !== 'open') return undefined;
+  const slot = rotation.onField.indexOf(teamId);
+  if (slot === -1) return undefined;
+  const name = players[rotation.keepers[slot]]?.name;
+  return name ? { name, placeholder: false } : { name: 'Goleiro', placeholder: true };
 }
 
 /** Texto dos times para compartilhar (WhatsApp etc.). */
 export function teamsAsText(rotation: Rotation, players: Record<string, Player>): string {
   const closed = rotation.mode === 'closed';
-  const teams = [...rotation.onField, ...rotation.queue].map((id) => {
-    const t = rotation.teams[id];
-    const names = t.playerIds.map((p) => {
-      const pl = players[p];
-      return pl ? `${closed && pl.isGoalkeeper ? '🧤 ' : '• '}${pl.name}` : '';
-    });
-    return `*${t.name}*\n${names.join('\n')}`;
-  });
-  if (!closed) teams.unshift(`*Gols*\n🧤 ${goalkeepersLabel(rotation, players).join('\n🧤 ')}`);
-  return teams.join('\n\n');
+  return [...rotation.onField, ...rotation.queue]
+    .map((id) => {
+      const t = rotation.teams[id];
+      const fixed = fixedKeeperFor(rotation, players, id);
+      const names = t.playerIds.map((p) => {
+        const pl = players[p];
+        return pl ? `${closed && pl.isGoalkeeper ? '🧤 ' : '• '}${pl.name}` : '';
+      });
+      if (fixed) names.unshift(`🧤 ${fixed.name}`);
+      return `*${t.name}*\n${names.join('\n')}`;
+    })
+    .join('\n\n');
 }

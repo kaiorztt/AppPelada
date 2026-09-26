@@ -21,8 +21,8 @@ function byArrival(ids: string[], arrival: string[]) {
 /**
  * Tira do campo os times em `leavingIds` (perdedor, ou os dois no empate) e coloca
  * os próximos da fila. Se um time que entra estiver incompleto, é completado com
- * jogadores de quem saiu, por ordem de chegada ou sorteio (`ctx.fill`); no modo
- * fechado, se ele não tiver goleiro, o goleiro de quem saiu fica. Quem sobra vai
+ * jogadores de quem saiu, por ordem de chegada ou sorteio (`ctx.fill`); no rodízio
+ * no gol, se ele não tiver goleiro, o goleiro de quem saiu fica. Quem sobra vai
  * para o fim da fila, completando primeiro o último time da fila se ele estiver
  * incompleto.
  */
@@ -88,7 +88,7 @@ export function rotate(state: Rotation, leavingIds: string[], ctx: RotationConte
 
 /**
  * Coloca um jogador que chegou atrasado no último time incompleto, ou num time novo.
- * No modo aberto, um goleiro atrasado vai direto para o gol se ainda faltar goleiro fixo.
+ * No goleiro fixo, um goleiro atrasado vai direto para o gol se ainda faltar goleiro fixo.
  */
 export function addLatePlayer(state: Rotation, playerId: string, isGoalkeeper = false): Rotation {
   if (state.mode === 'open' && isGoalkeeper && state.keepers.length < 2) {
@@ -113,17 +113,51 @@ export function addLatePlayer(state: Rotation, playerId: string, isGoalkeeper = 
     : { ...next, queue: [...state.queue, team.id] };
 }
 
-/** Tira um jogador (foi embora) do time dele. Times vazios somem da fila. */
-export function removeFromRotation(state: Rotation, playerId: string): Rotation {
+export type ReorderContext = Pick<RotationContext, 'arrival' | 'fill' | 'random'>;
+
+/**
+ * Tira um jogador (foi embora) do time dele e reorganiza o rodízio: o buraco é
+ * preenchido com alguém do último time da fila (por ordem de chegada ou sorteio),
+ * mantendo só o último time incompleto. Times vazios somem da fila.
+ */
+export function removeFromRotation(
+  state: Rotation,
+  playerId: string,
+  ctx: ReorderContext = { arrival: [] },
+): Rotation {
   const teams: Record<string, Team> = {};
   for (const [id, t] of Object.entries(state.teams)) {
-    const playerIds = t.playerIds.filter((p) => p !== playerId);
-    if (playerIds.length || state.onField.includes(id)) teams[id] = { ...t, playerIds };
+    teams[id] = { ...t, playerIds: t.playerIds.filter((p) => p !== playerId) };
   }
+
+  const order = [...state.onField, ...state.queue];
+  for (let i = 0; i < order.length; i++) {
+    const team = teams[order[i]];
+    while (team.playerIds.length < state.perTeam) {
+      // Só times da fila cedem jogadores; quem está em campo não troca de time.
+      const donorId = [...order.slice(Math.max(i + 1, state.onField.length))]
+        .reverse()
+        .find((id) => teams[id].playerIds.length);
+      if (!donorId) break;
+      const donor = teams[donorId];
+      const candidates =
+        ctx.fill === 'draw' ? shuffle(donor.playerIds, ctx.random) : byArrival(donor.playerIds, ctx.arrival);
+      const moved = candidates[0];
+      donor.playerIds = donor.playerIds.filter((p) => p !== moved);
+      team.playerIds.push(moved);
+    }
+  }
+
+  for (const id of state.queue) if (!teams[id].playerIds.length) delete teams[id];
   return {
     ...state,
     teams,
     keepers: state.keepers.filter((p) => p !== playerId),
     queue: state.queue.filter((id) => teams[id]),
   };
+}
+
+/** IDs de todo mundo que está no rodízio (times e goleiros fixos). */
+export function playersInRotation(state: Rotation): Set<string> {
+  return new Set([...Object.values(state.teams).flatMap((t) => t.playerIds), ...state.keepers]);
 }

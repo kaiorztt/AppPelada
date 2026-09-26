@@ -12,9 +12,9 @@ export function shuffle<T>(items: T[], random: () => number = Math.random): T[] 
 /**
  * Sorteia os times entre os presentes (`present` em ordem de chegada).
  *
- * - Fechado: cada time tem lineSize + 1; no máximo um goleiro por time, e os
+ * - Rodízio no gol (closed): cada time tem lineSize + 1; no máximo um goleiro por time, e os
  *   goleiros excedentes são sorteados na linha.
- * - Aberto: cada time tem só lineSize; até dois goleiros (os primeiros a chegar)
+ * - Goleiro fixo (open): cada time tem só lineSize; até dois goleiros (os primeiros a chegar)
  *   ficam fixos no gol, fora dos times.
  *
  * Os times são preenchidos em sequência, então só o último pode ficar incompleto.
