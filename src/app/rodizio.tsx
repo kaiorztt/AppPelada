@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ArrangeTeams } from '@/components/ArrangeTeams';
 import { PickerItem, PlayerPicker } from '@/components/PlayerPicker';
 import { TeamCard } from '@/components/TeamCard';
-import { Button, Card, confirm, EmptyState, IconButton, Screen, SectionLabel } from '@/components/ui';
+import { Button, Card, confirm, EmptyState, Screen, SectionLabel } from '@/components/ui';
 import { playersInRotation } from '@/logic/rotation';
 import { Player, Team } from '@/logic/types';
 import { FixedKeeper, fixedKeeperFor, usePlayersById } from '@/store/selectors';
@@ -15,12 +16,13 @@ export default function RotationScreen() {
   const c = useColors();
   const rotation = usePeladaStore((s) => s.rotation);
   const matches = usePeladaStore((s) => s.matches);
-  const canUndo = usePeladaStore((s) => s.undoStack.length > 0);
+  const lastAction = usePeladaStore((s) => s.undoStack[s.undoStack.length - 1]?.label);
   const allPlayers = usePeladaStore((s) => s.players);
   const presentIds = usePeladaStore((s) => s.presentIds);
-  const { teamLost, undoMatch, playerLeft, lateArrival, addPlayer } = usePeladaStore.getState();
+  const { teamLost, undo, playerLeft, lateArrival, addPlayer } = usePeladaStore.getState();
   const players = usePlayersById();
   const [picker, setPicker] = useState<'left' | 'arrived' | null>(null);
+  const [arranging, setArranging] = useState(false);
 
   if (!rotation) {
     return (
@@ -38,13 +40,19 @@ export default function RotationScreen() {
   const waiting = rotation.queue.length;
   const closed = rotation.mode === 'closed';
 
+  /** Jogadores de um time, agrupados sob "Time N · em campo/próximo/na fila". */
+  const teamItems = (teamId: string): PickerItem[] => {
+    const t = rotation.teams[teamId];
+    const q = rotation.queue.indexOf(teamId);
+    const where = q === -1 ? 'em campo' : q === 0 ? 'próximo' : `${q + 1}º na fila`;
+    const group = `${t.name} · ${where}`;
+    return t.playerIds.map((id) => ({ id, name: players[id]?.name ?? '', group, color: t.color }));
+  };
+
   // Quem pode sair: todo mundo nos times (e goleiros fixos), na ordem do rodízio.
   const leaving: PickerItem[] = [
-    ...rotation.keepers.map((id) => ({ id, name: players[id]?.name ?? '', hint: 'Goleiro fixo' })),
-    ...[...rotation.onField, ...rotation.queue].flatMap((teamId) => {
-      const t = rotation.teams[teamId];
-      return t.playerIds.map((id) => ({ id, name: players[id]?.name ?? '', hint: t.name, color: t.color }));
-    }),
+    ...rotation.keepers.map((id) => ({ id, name: players[id]?.name ?? '', group: 'Goleiros fixos' })),
+    ...[...rotation.onField, ...rotation.queue].flatMap((teamId) => teamItems(teamId)),
   ];
   // Quem pode chegar: cadastrados que não estão no rodízio (ausentes ou que saíram).
   const inRotation = playersInRotation(rotation);
@@ -74,11 +82,6 @@ export default function RotationScreen() {
     <Screen
       title="Rodízio"
       subtitle={`${matches.length} partida${matches.length === 1 ? '' : 's'} · ${waiting} na fila`}
-      right={
-        canUndo ? (
-          <IconButton icon="arrow-undo" label="Desfazer última partida" onPress={undoMatch} color={c.text} bg={c.surfaceAlt} />
-        ) : null
-      }
     >
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.roster}>
@@ -98,7 +101,27 @@ export default function RotationScreen() {
             onPress={() => setPicker('left')}
             style={{ flex: 1 }}
           />
+          <Button
+            label="Trocar"
+            icon="swap-vertical"
+            variant="secondary"
+            compact
+            onPress={() => setArranging(true)}
+            style={{ flex: 1 }}
+          />
         </View>
+        {lastAction ? (
+          <Card style={styles.undoBar}>
+            <Ionicons name="time-outline" size={18} color={c.textMuted} />
+            <View style={{ flex: 1 }}>
+              <Text style={[font.caption, { color: c.textMuted }]}>ÚLTIMA AÇÃO</Text>
+              <Text style={[font.small, { color: c.text }]} numberOfLines={2}>
+                {lastAction}
+              </Text>
+            </View>
+            <Button label="Desfazer" icon="arrow-undo" variant="secondary" compact onPress={undo} />
+          </Card>
+        ) : null}
         <SectionLabel>EM CAMPO</SectionLabel>
         <Card style={{ gap: space.lg }}>
           <View style={styles.versus}>
@@ -112,13 +135,17 @@ export default function RotationScreen() {
             <View style={[styles.vs, { backgroundColor: c.surfaceAlt }]}>
               <Text style={[font.caption, { color: c.textMuted }]}>VS</Text>
             </View>
-            {b ? <Side
+            {b ? (
+              <Side
                 team={b}
                 players={players}
                 perTeam={rotation.perTeam}
                 closed={closed}
                 fixedKeeper={fixedKeeperFor(rotation, players, b.id)}
-              /> : <View style={{ flex: 1 }} />}
+              />
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
           </View>
           {b && waiting > 0 ? (
             <>
@@ -208,6 +235,7 @@ export default function RotationScreen() {
         onPick={onLeft}
         onClose={() => setPicker(null)}
       />
+      <ArrangeTeams visible={arranging} onClose={() => setArranging(false)} />
     </Screen>
   );
 }
@@ -227,8 +255,6 @@ function Side({
 }) {
   const c = useColors();
   const members = team.playerIds.map((id) => players[id]).filter(Boolean);
-  const isKeeper = (p: Player) => closed && p.isGoalkeeper;
-  const ordered = [...members].sort((x, y) => Number(isKeeper(y)) - Number(isKeeper(x)));
   return (
     <View style={{ flex: 1, gap: space.sm }}>
       <View style={styles.sideHead}>
@@ -257,9 +283,9 @@ function Side({
           </Text>
         </View>
       ) : null}
-      {ordered.map((p) => (
+      {members.map((p) => (
         <View key={p.id} style={styles.sideRow}>
-          {isKeeper(p) ? <Ionicons name="hand-left" size={12} color={team.color} /> : null}
+          {closed && p.isGoalkeeper ? <Ionicons name="hand-left" size={12} color={team.color} /> : null}
           <Text style={[font.small, { color: c.text, flexShrink: 1 }]} numberOfLines={1}>
             {p.name}
           </Text>
@@ -272,6 +298,13 @@ function Side({
 const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg, paddingBottom: space.xxl },
   roster: { flexDirection: 'row', gap: space.md },
+  undoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.md,
+    marginTop: space.md,
+  },
   versus: { flexDirection: 'row', gap: space.md },
   vs: {
     alignSelf: 'flex-start',

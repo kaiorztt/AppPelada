@@ -157,6 +157,65 @@ export function removeFromRotation(
   };
 }
 
+/** Onde um jogador pode ficar: um time, o gol fixo ou um time novo no fim da fila. */
+export type Slot = 'keepers' | 'new' | string;
+
+/** Até quantos goleiros fixos (um por gol). */
+export const MAX_KEEPERS = 2;
+
+/** Onde o jogador está agora: grupo e posição dentro dele. */
+export function locate(state: Rotation, playerId: string): { group: Slot; index: number } | undefined {
+  const k = state.keepers.indexOf(playerId);
+  if (k !== -1) return { group: 'keepers', index: k };
+  for (const t of Object.values(state.teams)) {
+    const i = t.playerIds.indexOf(playerId);
+    if (i !== -1) return { group: t.id, index: i };
+  }
+  return undefined;
+}
+
+/**
+ * Coloca o jogador em `group` na posição `index` (contada já sem ele), onde o
+ * usuário quiser: outro time, outra posição no mesmo time, o gol fixo ou um time
+ * novo no fim da fila. Times da fila que ficarem vazios somem.
+ */
+export function relocate(state: Rotation, playerId: string, group: Slot, index: number): Rotation {
+  const teams: Record<string, Team> = {};
+  for (const [id, t] of Object.entries(state.teams)) {
+    teams[id] = { ...t, playerIds: t.playerIds.filter((p) => p !== playerId) };
+  }
+  const keepers = state.keepers.filter((p) => p !== playerId);
+  let queue = [...state.queue];
+  let nextNumber = state.nextNumber;
+
+  if (group === 'keepers') {
+    if (keepers.length >= MAX_KEEPERS) return state;
+    keepers.splice(index, 0, playerId);
+  } else if (group === 'new' || !teams[group]) {
+    const team = makeTeam(nextNumber++, [playerId]);
+    teams[team.id] = team;
+    queue.push(team.id);
+  } else {
+    teams[group].playerIds.splice(index, 0, playerId);
+  }
+
+  for (const id of queue) if (!teams[id].playerIds.length) delete teams[id];
+  queue = queue.filter((id) => teams[id]);
+  return { ...state, teams, keepers, queue, nextNumber };
+}
+
+/**
+ * Troca dois jogadores de lugar (times, posições ou gol fixo). Os tamanhos dos
+ * times e a ordem da fila não mudam.
+ */
+export function swapPlayers(state: Rotation, a: string, b: string): Rotation {
+  if (a === b) return state;
+  const swap = (p: string) => (p === a ? b : p === b ? a : p);
+  const teams: Record<string, Team> = {};
+  for (const [id, t] of Object.entries(state.teams)) teams[id] = { ...t, playerIds: t.playerIds.map(swap) };
+  return { ...state, teams, keepers: state.keepers.map(swap) };
+}
+
 /** IDs de todo mundo que está no rodízio (times e goleiros fixos). */
 export function playersInRotation(state: Rotation): Set<string> {
   return new Set([...Object.values(state.teams).flatMap((t) => t.playerIds), ...state.keepers]);

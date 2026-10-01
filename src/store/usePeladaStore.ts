@@ -6,11 +6,24 @@ import { drawTeams } from '@/logic/draw';
 import {
   addLatePlayer,
   playersInRotation,
+  locate,
+  relocate,
   removeFromRotation,
   ReorderContext,
   rotate,
+  Slot,
+  swapPlayers,
 } from '@/logic/rotation';
 import { FillMode, Match, Player, Rotation, TeamMode } from '@/logic/types';
+
+/** Foto do rodízio antes de uma ação, para poder desfazer. */
+export type Snapshot = {
+  /** O que foi feito (ex.: "Kaio ↔ Henrique"). */
+  label: string;
+  rotation: Rotation;
+  presentIds: string[];
+  matches: Match[];
+};
 
 type State = {
   players: Player[];
@@ -24,8 +37,8 @@ type State = {
   totalCost: number;
   rotation: Rotation | null;
   matches: Match[];
-  /** Estados anteriores do rodízio, para desfazer a última partida. */
-  undoStack: Rotation[];
+  /** Ações do rodízio que podem ser desfeitas (partidas, trocas, saiu/chegou), da mais antiga para a mais nova. */
+  undoStack: Snapshot[];
 };
 
 type Actions = {
@@ -44,13 +57,27 @@ type Actions = {
   playerLeft: (id: string) => void;
   /** Jogador chegou depois do sorteio: marca presença e entra no rodízio. */
   lateArrival: (id: string) => void;
-  undoMatch: () => void;
+  /** Tela Trocar: coloca o jogador em `group` na posição `index` (arrastar o nome). */
+  relocatePlayer: (id: string, group: Slot, index: number) => void;
+  /** Tela Trocar: dois jogadores trocam de lugar (tocar em um e depois no outro). */
+  swap: (a: string, b: string) => void;
+  /** Desfaz a última ação do rodízio. */
+  undo: () => void;
   newSession: () => void;
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 const reorderCtx = (s: State): ReorderContext => ({ arrival: s.presentIds, fill: s.fillMode });
+
+const nameOf = (s: State, id: string) => s.players.find((p) => p.id === id)?.name ?? 'Jogador';
+
+/** Empilha a foto do estado atual antes de uma ação no rodízio. */
+function remember(s: State, label: string): Snapshot[] {
+  if (!s.rotation) return s.undoStack;
+  const snap: Snapshot = { label, rotation: s.rotation, presentIds: s.presentIds, matches: s.matches };
+  return [...s.undoStack, snap].slice(-30);
+}
 
 export const usePeladaStore = create<State & Actions>()(
   persist(
@@ -127,7 +154,8 @@ export const usePeladaStore = create<State & Actions>()(
       },
 
       teamLost: (leaving) => {
-        const { rotation, presentIds, players, fillMode, matches, undoStack } = get();
+        const s = get();
+        const { rotation, presentIds, players, fillMode, matches } = s;
         if (!rotation || !rotation.queue.length) return;
         const keepers = new Set(players.filter((p) => p.isGoalkeeper).map((p) => p.id));
         const next = rotate(rotation, leaving, {
@@ -143,17 +171,19 @@ export const usePeladaStore = create<State & Actions>()(
             .map((id) => rotation.teams[id].name),
           losers: leaving.map((id) => rotation.teams[id].name),
         };
-        set({
-          rotation: next,
-          matches: [match, ...matches],
-          undoStack: [...undoStack, rotation].slice(-20),
-        });
+        const label = match.winners.length
+          ? `${match.winners.join(', ')} venceu ${match.losers.join(', ')}`
+          : `Empate: ${match.losers.join(' × ')}`;
+        set({ rotation: next, matches: [match, ...matches], undoStack: remember(s, label) });
       },
 
       playerLeft: (id) =>
         set((s) =>
           s.rotation
-            ? { rotation: removeFromRotation(s.rotation, id, reorderCtx(s)), undoStack: [] }
+            ? {
+                rotation: removeFromRotation(s.rotation, id, reorderCtx(s)),
+                undoStack: remember(s, `${nameOf(s, id)} saiu`),
+              }
             : {},
         ),
 
@@ -164,17 +194,43 @@ export const usePeladaStore = create<State & Actions>()(
           return {
             presentIds: s.presentIds.includes(id) ? s.presentIds : [...s.presentIds, id],
             rotation: addLatePlayer(s.rotation, id, isGoalkeeper),
-            undoStack: [],
+            undoStack: remember(s, `${nameOf(s, id)} chegou`),
           };
         }),
 
-      undoMatch: () => {
-        const { undoStack, matches } = get();
-        if (!undoStack.length) return;
+      relocatePlayer: (id, group, index) =>
+        set((s) => {
+          const r = s.rotation;
+          const from = r && locate(r, id);
+          if (!r || !from || (from.group === group && from.index === index)) return {};
+          const next = relocate(r, id, group, index);
+          if (next === r) return {};
+          const dest =
+            group === 'keepers'
+              ? 'gol fixo'
+              : group === 'new' || !r.teams[group]
+                ? next.teams[next.queue[next.queue.length - 1]].name
+                : r.teams[group].name;
+          const label = from.group === group ? `${nameOf(s, id)} mudou de posição` : `${nameOf(s, id)} → ${dest}`;
+          return { rotation: next, undoStack: remember(s, label) };
+        }),
+
+      swap: (a, b) =>
+        set((s) =>
+          s.rotation && a !== b
+            ? { rotation: swapPlayers(s.rotation, a, b), undoStack: remember(s, `${nameOf(s, a)} ↔ ${nameOf(s, b)}`) }
+            : {},
+        ),
+
+      undo: () => {
+        const { undoStack } = get();
+        const last = undoStack[undoStack.length - 1];
+        if (!last) return;
         set({
-          rotation: undoStack[undoStack.length - 1],
+          rotation: last.rotation,
+          presentIds: last.presentIds,
+          matches: last.matches,
           undoStack: undoStack.slice(0, -1),
-          matches: matches.slice(1),
         });
       },
 
@@ -185,10 +241,10 @@ export const usePeladaStore = create<State & Actions>()(
     {
       name: 'pelada-store',
       storage: createJSONStorage(() => AsyncStorage),
-      version: 1,
-      // v0 não guardava modo/tamanho no rodízio: era sempre rodízio no gol.
+      version: 2,
       migrate: (persisted, version) => {
         const s = persisted as State;
+        // v0 não guardava modo/tamanho no rodízio: era sempre rodízio no gol.
         if (version < 1) {
           const upgrade = (r: Rotation): Rotation => ({
             ...r,
@@ -197,8 +253,9 @@ export const usePeladaStore = create<State & Actions>()(
             keepers: [],
           });
           s.rotation = s.rotation && upgrade(s.rotation);
-          s.undoStack = (s.undoStack ?? []).map(upgrade);
         }
+        // v2: o histórico passou a guardar fotos com descrição; o antigo é descartado.
+        if (version < 2) s.undoStack = [];
         return s;
       },
     },

@@ -1,5 +1,13 @@
 import { describe, expect, it } from '@jest/globals';
-import { addLatePlayer, removeFromRotation, rotate, RotationContext } from '../src/logic/rotation';
+import {
+  addLatePlayer,
+  locate,
+  relocate,
+  removeFromRotation,
+  rotate,
+  RotationContext,
+  swapPlayers,
+} from '../src/logic/rotation';
 import { makeTeam, Rotation, TeamMode } from '../src/logic/types';
 
 // Chegada: a1..a6, b1..b6, c1..c6 ... ; goleiros são os IDs terminados em "g".
@@ -131,6 +139,70 @@ describe('removeFromRotation', () => {
     const r = removeFromRotation(s, 'a1', { arrival: [], fill: 'draw', random: () => 0 });
     expect(r.teams.t1.playerIds).toContain('c2');
     expect(r.teams.t3.playerIds).toEqual(['c1', 'c3']);
+  });
+});
+
+describe('relocate', () => {
+  it('muda a ordem dentro do mesmo time', () => {
+    const s = state(A, B);
+    const r = relocate(s, 'a5', 't1', 1);
+    expect(r.teams.t1.playerIds).toEqual(['ag', 'a5', 'a1', 'a2', 'a3', 'a4']);
+  });
+
+  it('leva o jogador para outro time na posição escolhida', () => {
+    const s = state(A, B, ['c1', 'c2']);
+    const r = relocate(s, 'a3', 't3', 1);
+    expect(r.teams.t1.playerIds).toEqual(['ag', 'a1', 'a2', 'a4', 'a5']);
+    expect(r.teams.t3.playerIds).toEqual(['c1', 'a3', 'c2']);
+  });
+
+  it('cria time novo no fim da fila e apaga time da fila que esvaziou', () => {
+    const s = state(A, B, ['c1']);
+    const r = relocate(s, 'c1', 'new', 0);
+    expect(r.teams.t3).toBeUndefined();
+    expect(r.queue).toEqual(['t4']);
+    expect(r.teams.t4.playerIds).toEqual(['c1']);
+    expect(r.nextNumber).toBe(5);
+  });
+
+  it('goleiro fixo vai para um time e alguém do time vai para o gol', () => {
+    const s = stateWith('open', 5, ['xg', 'yg'], [['a1'], ['b1', 'b2']]);
+    const r = relocate(relocate(s, 'yg', 't2', 0), 'b2', 'keepers', 1);
+    expect(r.keepers).toEqual(['xg', 'b2']);
+    expect(r.teams.t2.playerIds).toEqual(['yg', 'b1']);
+  });
+
+  it('não deixa ter mais de dois goleiros fixos', () => {
+    const s = stateWith('open', 5, ['xg', 'yg'], [['a1'], ['b1']]);
+    expect(relocate(s, 'a1', 'keepers', 0)).toBe(s);
+  });
+
+  it('locate encontra grupo e posição', () => {
+    const s = stateWith('open', 5, ['xg'], [['a1', 'a2'], ['b1']]);
+    expect(locate(s, 'a2')).toEqual({ group: 't1', index: 1 });
+    expect(locate(s, 'xg')).toEqual({ group: 'keepers', index: 0 });
+    expect(locate(s, 'zz')).toBeUndefined();
+  });
+});
+
+describe('swapPlayers', () => {
+  it('troca dois jogadores de times diferentes, cada um na posição do outro', () => {
+    const s = state(A, B, C);
+    const r = swapPlayers(s, 'a3', 'c2');
+    expect(r.teams.t1.playerIds).toEqual(['ag', 'a1', 'a2', 'c2', 'a4', 'a5']);
+    expect(r.teams.t3.playerIds).toEqual(['cg', 'c1', 'a3', 'c3', 'c4', 'c5']);
+  });
+
+  it('troca a posição dentro do mesmo time', () => {
+    const s = state(A, B);
+    expect(swapPlayers(s, 'a1', 'a5').teams.t1.playerIds).toEqual(['ag', 'a5', 'a2', 'a3', 'a4', 'a1']);
+  });
+
+  it('troca goleiro fixo com jogador de um time', () => {
+    const s = stateWith('open', 5, ['xg', 'yg'], [['a1'], ['b1', 'b2']]);
+    const r = swapPlayers(s, 'yg', 'b2');
+    expect(r.keepers).toEqual(['xg', 'b2']);
+    expect(r.teams.t2.playerIds).toEqual(['b1', 'yg']);
   });
 });
 

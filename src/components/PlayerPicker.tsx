@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { font, radius, space, useColors } from '@/theme';
@@ -9,10 +9,25 @@ import { EmptyState, IconButton, IconName, tap } from './ui';
 export type PickerItem = {
   id: string;
   name: string;
-  /** Texto à direita (ex.: nome do time). */
+  /** Texto à direita (ex.: "saiu"). */
   hint?: string;
+  /** Bloco da lista (ex.: nome do time). Itens seguidos do mesmo grupo ficam juntos. */
+  group?: string;
+  /** Cor do grupo (bolinha no título do bloco). */
   color?: string;
 };
+
+type Section = { title?: string; color?: string; data: PickerItem[] };
+
+function toSections(items: PickerItem[]): Section[] {
+  const sections: Section[] = [];
+  for (const item of items) {
+    const last = sections[sections.length - 1];
+    if (last && last.title === item.group) last.data.push(item);
+    else sections.push({ title: item.group, color: item.color, data: [item] });
+  }
+  return sections;
+}
 
 type Props = {
   visible: boolean;
@@ -68,13 +83,24 @@ export function PlayerPicker({ visible, title, subtitle, icon, items, emptyText,
           </View>
         ) : null}
 
-        <FlatList
-          data={items}
+        <SectionList
+          sections={toSections(items)}
           keyExtractor={(i) => i.id}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.lg }}
+          style={{ flexGrow: 0, flexShrink: 1 }}
+          contentContainerStyle={{ paddingHorizontal: space.lg }}
           keyboardShouldPersistTaps="handled"
+          stickySectionHeadersEnabled={false}
+          ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
           ListEmptyComponent={<EmptyState icon="people-outline" title="Ninguém aqui" text={emptyText} />}
+          renderSectionHeader={({ section }) =>
+            section.title ? (
+              <View style={styles.sectionHead}>
+                {section.color ? <View style={[styles.sectionDot, { backgroundColor: section.color }]} /> : null}
+                <Text style={[font.caption, { color: c.textMuted, flex: 1 }]}>{section.title.toUpperCase()}</Text>
+                <Text style={[font.caption, { color: c.textMuted }]}>{section.data.length}</Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
             <Pressable
               onPress={() => {
@@ -90,12 +116,7 @@ export function PlayerPicker({ visible, title, subtitle, icon, items, emptyText,
               <Text style={[font.body, { color: c.text, flex: 1 }]} numberOfLines={1}>
                 {item.name}
               </Text>
-              {item.hint ? (
-                <View style={styles.hint}>
-                  {item.color ? <View style={[styles.dot, { backgroundColor: item.color }]} /> : null}
-                  <Text style={[font.small, { color: c.textMuted }]}>{item.hint}</Text>
-                </View>
-              ) : null}
+              {item.hint ? <Text style={[font.small, { color: c.textMuted }]}>{item.hint}</Text> : null}
             </Pressable>
           )}
         />
@@ -135,6 +156,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
   },
-  hint: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 8, height: 8, borderRadius: radius.pill },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
+  },
+  sectionDot: { width: 10, height: 10, borderRadius: radius.pill },
 });
